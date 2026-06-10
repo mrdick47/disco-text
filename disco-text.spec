@@ -1,20 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
-import sys
-from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
+
+datas = []
+datas += collect_data_files('PyQt6')
+datas += collect_data_files('keyring')
+
+hiddenimports = [
+    'discord',
+    'PyQt6',
+    'keyring',
+    'keyring.backends',
+    'keyring.backends.SecretService',
+    'keyring.backends.chainer',
+]
+hiddenimports += collect_submodules('keyring')
 
 a = Analysis(
     ['src/main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[
-        'discord',
-        'PyQt6',
-        'keyring',
-        'keyring.backends',
-    ],
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -24,7 +32,7 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-pyz = PYZ(a.pures, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
