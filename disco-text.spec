@@ -1,4 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Cross-platform spec - used by all platforms via CI
+import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
@@ -16,6 +18,9 @@ hiddenimports = [
     'keyring.backends.chainer',
 ]
 hiddenimports += collect_submodules('keyring')
+
+if sys.platform == 'win32':
+    hiddenimports.append('keyring.backends.Windows')
 
 a = Analysis(
     ['src/main.py'],

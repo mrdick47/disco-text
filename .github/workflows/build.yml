@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: disco-text-linux
+          - os: windows-latest
+            artifact: disco-text-windows
+          - os: macos-latest
+            artifact: disco-text-macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" pyinstaller
+
+      - name: Build executable (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: pyinstaller disco-text.spec --noconfirm
+
+      - name: Build executable (Windows)
+        if: runner.os == 'Windows'
+        run: pyinstaller disco-text.spec --noconfirm
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/disco-text*
