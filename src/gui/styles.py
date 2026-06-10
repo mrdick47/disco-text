@@ -59,6 +59,20 @@ QPushButton#secondary {{
 QPushButton#secondary:hover {{
     background-color: {DARK_BORDER};
 }}
+QPushButton#nav {{
+    background-color: {DARK_SURFACE};
+    border: 1px solid {DARK_BORDER};
+    padding: 4px 8px;
+    min-width: 24px;
+    max-width: 30px;
+}}
+QPushButton#nav:hover {{
+    background-color: {DARK_BORDER};
+}}
+QPushButton#nav:disabled {{
+    background-color: {DARK_SURFACE};
+    color: {TEXT_DIM};
+}}
 QLineEdit {{
     background-color: {DARK_SURFACE};
     border: 1px solid {DARK_BORDER};

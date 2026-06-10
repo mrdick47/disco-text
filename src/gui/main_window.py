@@ -194,12 +194,7 @@ class MainWindow(QMainWindow):
         self._export_btn = QPushButton("Export Messages...")
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self._show_export_dialog)
-        self._export_selected_btn = QPushButton("Export Selected")
-        self._export_selected_btn.setObjectName("secondary")
-        self._export_selected_btn.setEnabled(False)
-        self._export_selected_btn.clicked.connect(self._show_export_selected_dialog)
         export_bar.addWidget(self._export_btn)
-        export_bar.addWidget(self._export_selected_btn)
         export_bar.addStretch()
         main_layout.addLayout(export_bar)
 
@@ -300,7 +295,6 @@ class MainWindow(QMainWindow):
         self._channel_panel.clear()
         self._message_panel.clear()
         self._export_btn.setEnabled(False)
-        self._export_selected_btn.setEnabled(False)
 
     def _on_error(self, message: str) -> None:
         logger.error("_on_error: %s", message)
@@ -344,7 +338,6 @@ class MainWindow(QMainWindow):
                 channel_name = ch.name
         self._message_panel.show_messages(messages, channel_name)
         self._export_btn.setEnabled(len(messages) > 0)
-        self._export_selected_btn.setEnabled(False)
         self._status_widget.showMessage(f"Loaded {len(messages)} messages")
 
     def _on_fetch_error(self, message: str) -> None:
@@ -352,32 +345,26 @@ class MainWindow(QMainWindow):
         self._status_widget.showMessage(f"Error: {message}")
         self._message_panel.clear()
         self._export_btn.setEnabled(False)
-        self._export_selected_btn.setEnabled(False)
 
     def _on_message_selection_changed(self) -> None:
-        selected = self._message_panel.get_selected_messages()
         total = len(self._current_messages)
-        if len(selected) == total or len(selected) == 0:
-            self._export_selected_btn.setEnabled(False)
-            self._status_widget.showMessage(f"Loaded {total} messages")
+        sel_range = self._message_panel.get_selection_range()
+        if sel_range and (sel_range[1] - sel_range[0] + 1) < total:
+            self._status_widget.showMessage(
+                f"Selected messages {sel_range[0] + 1}\u2013{sel_range[1] + 1} of {total}"
+            )
         else:
-            self._export_selected_btn.setEnabled(True)
-            sel_range = self._message_panel.get_selection_range()
-            if sel_range:
-                self._status_widget.showMessage(
-                    f"Selected messages {sel_range[0] + 1}\u2013{sel_range[1] + 1} of {total}"
-                )
+            self._status_widget.showMessage(f"Loaded {total} messages")
 
     def _show_export_dialog(self) -> None:
         if not self._current_messages:
             return
-        self._do_export(self._current_messages)
-
-    def _show_export_selected_dialog(self) -> None:
         selected = self._message_panel.get_selected_messages()
-        if not selected or len(selected) == len(self._current_messages):
-            return
-        self._do_export(selected)
+        total = len(self._current_messages)
+        if len(selected) < total and len(selected) > 0:
+            self._do_export(selected)
+        else:
+            self._do_export(self._current_messages)
 
     def _do_export(self, messages: list) -> None:
         channel_name = ""
