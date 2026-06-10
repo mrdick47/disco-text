@@ -14,16 +14,22 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
 def main():
     LOG_DIR.mkdir(exist_ok=True)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.WARNING)
+
+    file_handler = logging.FileHandler(LOG_DIR / "disco-text.log", mode="w")
+    file_handler.setLevel(logging.DEBUG)
+
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.WARNING,
         format=LOG_FORMAT,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(LOG_DIR / "disco-text.log", mode="w"),
-        ],
+        handlers=[console_handler, file_handler],
     )
     logger = logging.getLogger("disco-text")
-    logger.info("Starting Disco-Text")
+    logger.setLevel(logging.DEBUG)
+    discoord_logger = logging.getLogger("discord")
+    discoord_logger.setLevel(logging.WARNING)
 
     try:
         QApplication.setHighDpiScaleFactorRoundingPolicy(
