@@ -1,12 +1,9 @@
 import discord
-from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QDateEdit,
     QDialog,
     QFileDialog,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -23,12 +20,14 @@ class ExportDialog(QDialog):
         messages: list[discord.Message],
         channel_name: str,
         server_name: str,
+        total_count: int,
         parent=None,
     ):
         super().__init__(parent)
         self._messages = messages
         self._channel_name = channel_name
         self._server_name = server_name
+        self._total_count = total_count
 
         self.setWindowTitle("Export Messages")
         self.setMinimumWidth(450)
@@ -37,7 +36,15 @@ class ExportDialog(QDialog):
     def setup_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        info = QLabel(f"Exporting {len(self._messages)} messages from #{self._channel_name}")
+        if len(self._messages) == self._total_count:
+            info = QLabel(
+                f"Exporting all {len(self._messages)} messages from #{self._channel_name}"
+            )
+        else:
+            info = QLabel(
+                f"Exporting {len(self._messages)} of {self._total_count} messages "
+                f"from #{self._channel_name}"
+            )
         info.setObjectName("subheading")
         layout.addWidget(info)
 
@@ -51,31 +58,7 @@ class ExportDialog(QDialog):
         format_layout.addWidget(self._md_check)
         layout.addWidget(format_group)
 
-        date_group = QGroupBox("Date Range")
-        date_layout = QVBoxLayout(date_group)
-        self._all_radio = QCheckBox("Export all messages")
-        self._all_radio.setChecked(True)
-        self._all_radio.toggled.connect(self._toggle_date_pickers)
-        date_layout.addWidget(self._all_radio)
-
-        range_layout = QHBoxLayout()
-        range_layout.addWidget(QLabel("From:"))
-        self._from_date = QDateEdit()
-        self._from_date.setCalendarPopup(True)
-        self._from_date.setDate(QDate.currentDate().addMonths(-1))
-        self._from_date.setEnabled(False)
-        range_layout.addWidget(self._from_date)
-
-        range_layout.addWidget(QLabel("To:"))
-        self._to_date = QDateEdit()
-        self._to_date.setCalendarPopup(True)
-        self._to_date.setDate(QDate.currentDate())
-        self._to_date.setEnabled(False)
-        range_layout.addWidget(self._to_date)
-        date_layout.addLayout(range_layout)
-        layout.addWidget(date_group)
-
-        btn_layout = QHBoxLayout()
+        btn_layout = QVBoxLayout()
         export_btn = QPushButton("Export")
         export_btn.clicked.connect(self._do_export)
         cancel_btn = QPushButton("Cancel")
@@ -85,26 +68,13 @@ class ExportDialog(QDialog):
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
 
-    def _toggle_date_pickers(self, checked: bool) -> None:
-        self._from_date.setEnabled(not checked)
-        self._to_date.setEnabled(not checked)
-
     def _do_export(self) -> None:
         if not self._txt_check.isChecked() and not self._md_check.isChecked():
             QMessageBox.warning(self, "No Format", "Please select at least one export format.")
             return
 
-        export_all = self._all_radio.isChecked()
-        messages = self._messages
-        if not export_all:
-            from_dt = self._from_date.dateTime().toPyDateTime()
-            to_dt = self._to_date.dateTime().toPyDateTime()
-            messages = [m for m in self._messages if from_dt <= m.created_at <= to_dt]
-
-        if not messages:
-            QMessageBox.warning(
-                self, "No Messages", "No messages found in the selected date range."
-            )
+        if not self._messages:
+            QMessageBox.warning(self, "No Messages", "No messages to export.")
             return
 
         save_dir = QFileDialog.getExistingDirectory(self, "Choose Export Directory")
@@ -114,15 +84,22 @@ class ExportDialog(QDialog):
         safe_name = self._channel_name.replace(" ", "_")
         server_safe = self._server_name.replace(" ", "_")
 
+        if len(self._messages) < self._total_count:
+            first = self._messages[0].created_at.strftime("%Y%m%d")
+            last = self._messages[-1].created_at.strftime("%Y%m%d")
+            suffix = f"_{first}-{last}"
+        else:
+            suffix = ""
+
         if self._txt_check.isChecked():
-            content = export_txt(messages, self._channel_name, self._server_name)
-            path = f"{save_dir}/{server_safe}_{safe_name}.txt"
+            content = export_txt(self._messages, self._channel_name, self._server_name)
+            path = f"{save_dir}/{server_safe}_{safe_name}{suffix}.txt"
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 
         if self._md_check.isChecked():
-            content = export_md(messages, self._channel_name, self._server_name)
-            path = f"{save_dir}/{server_safe}_{safe_name}.md"
+            content = export_md(self._messages, self._channel_name, self._server_name)
+            path = f"{save_dir}/{server_safe}_{safe_name}{suffix}.md"
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
 

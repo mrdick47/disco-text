@@ -108,7 +108,7 @@ class TokenPage(QWizardPage):
         layout.addWidget(_label("Paste your Discord bot token below:"))
 
         self._token_input = QLineEdit()
-        self._token_input.setPlaceholderText("MTIzNDU2Nzg5MDEyMzQ1Njc4OQ...")
+        self._token_input.setPlaceholderText("Paste your bot token here...")
         self._token_input.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self._token_input)
 
