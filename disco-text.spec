@@ -1,13 +1,16 @@
-# -*- mode: python ; coding: utf-8 -*-
-# Cross-platform spec - used by all platforms via CI
 import sys
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+assets_dir = str(Path('.', 'assets').resolve())
+icon_path = str(Path(assets_dir, 'icon.ico')) if sys.platform == 'win32' else None
+
 datas = []
 datas += collect_data_files('PyQt6')
 datas += collect_data_files('keyring')
+datas.append((assets_dir, 'assets'))
 
 hiddenimports = [
     'discord',
@@ -59,5 +62,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=icon_path,
 )

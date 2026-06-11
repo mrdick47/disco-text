@@ -3,10 +3,12 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from src.gui.main_window import MainWindow
 from src.gui.styles import STYLESHEET
+from src.version import get_version
 
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
@@ -39,6 +41,11 @@ def main():
         app.setStyleSheet(STYLESHEET)
         app.setApplicationName("Disco-Text")
         app.setOrganizationName("Disco-Text")
+        app.setApplicationVersion(get_version())
+
+        icon_path = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
 
         logger.info("Creating main window")
         window = MainWindow()

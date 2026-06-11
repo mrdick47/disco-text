@@ -1,12 +1,15 @@
+import enum
+
 import discord
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -14,14 +17,64 @@ from PyQt6.QtWidgets import (
 
 MAX_MESSAGE_LENGTH = 300
 
-MATCH_BG = QColor(113, 63, 237, 60)
-MATCH_CURRENT_BG = QColor(113, 63, 237, 120)
-SELECTION_START_BG = QColor(72, 187, 120, 80)
-SELECTION_RANGE_BG = QColor(72, 187, 120, 40)
+RANGE_BG = "#7c3aed"
+
+_ICON_SIZE = 16
+_ACCENT = QColor("#7c3aed")
+
+
+def _make_from_icon() -> QIcon:
+    px = QPixmap(_ICON_SIZE, _ICON_SIZE)
+    px.fill(Qt.GlobalColor.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QBrush(_ACCENT))
+    p.setPen(Qt.PenStyle.NoPen)
+    tri = QPolygonF()
+    tri.append(QPointF(3, 2))
+    tri.append(QPointF(3, 14))
+    tri.append(QPointF(14, 8))
+    p.drawPolygon(tri)
+    p.end()
+    return QIcon(px)
+
+
+def _make_to_icon() -> QIcon:
+    px = QPixmap(_ICON_SIZE, _ICON_SIZE)
+    px.fill(Qt.GlobalColor.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QBrush(_ACCENT))
+    p.setPen(Qt.PenStyle.NoPen)
+    tri = QPolygonF()
+    tri.append(QPointF(13, 2))
+    tri.append(QPointF(13, 14))
+    tri.append(QPointF(2, 8))
+    p.drawPolygon(tri)
+    p.end()
+    return QIcon(px)
+
+
+def _make_bar_icon() -> QIcon:
+    px = QPixmap(_ICON_SIZE, _ICON_SIZE)
+    px.fill(Qt.GlobalColor.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setBrush(QBrush(_ACCENT))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawRect(QRectF(6, 0, 4, _ICON_SIZE))
+    p.end()
+    return QIcon(px)
+
+
+class SelectionMode(enum.Enum):
+    RANGE = "range"
+    CHECKBOX = "checkbox"
 
 
 class MessagePreviewPanel(QWidget):
     selection_changed = pyqtSignal()
+    mode_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -63,59 +116,127 @@ class MessagePreviewPanel(QWidget):
         layout.addWidget(self._match_label)
 
         self._list = QListWidget()
-        self._list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self._list.itemSelectionChanged.connect(self._on_selection_changed)
+        self._list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._show_context_menu)
+        self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self._list.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self._list, 1)
 
-        sel_bar = QHBoxLayout()
+        self._toolbar = QHBoxLayout()
 
-        self._set_start_btn = QPushButton("Set Start")
-        self._set_start_btn.setObjectName("secondary")
-        self._set_start_btn.setToolTip("Mark current message as export range start")
-        self._set_start_btn.clicked.connect(self._set_range_start)
-        sel_bar.addWidget(self._set_start_btn)
+        self._set_from_btn = QPushButton("Set From")
+        self._set_from_btn.setObjectName("secondary")
+        self._set_from_btn.setToolTip("Set current message as range start")
+        self._set_from_btn.clicked.connect(self._set_range_from)
+        self._toolbar.addWidget(self._set_from_btn)
 
-        self._set_end_btn = QPushButton("Set End")
-        self._set_end_btn.setObjectName("secondary")
-        self._set_end_btn.setToolTip("Mark current message as export range end")
-        self._set_end_btn.clicked.connect(self._set_range_end)
-        sel_bar.addWidget(self._set_end_btn)
+        self._set_to_btn = QPushButton("Set To")
+        self._set_to_btn.setObjectName("secondary")
+        self._set_to_btn.setToolTip("Set current message as range end")
+        self._set_to_btn.clicked.connect(self._set_range_to)
+        self._toolbar.addWidget(self._set_to_btn)
 
-        self._clear_sel_btn = QPushButton("Clear Sel")
-        self._clear_sel_btn.setObjectName("secondary")
-        self._clear_sel_btn.setToolTip("Clear the export range selection")
-        self._clear_sel_btn.clicked.connect(self._clear_selection)
-        sel_bar.addWidget(self._clear_sel_btn)
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setObjectName("secondary")
+        self._clear_btn.setToolTip("Clear the range selection")
+        self._clear_btn.clicked.connect(self._clear_range)
+        self._toolbar.addWidget(self._clear_btn)
 
-        sel_bar.addStretch()
+        self._select_all_btn = QPushButton("Select All")
+        self._select_all_btn.setObjectName("secondary")
+        self._select_all_btn.setToolTip("Check all messages")
+        self._select_all_btn.clicked.connect(self._select_all)
+        self._select_all_btn.setVisible(False)
+        self._toolbar.addWidget(self._select_all_btn)
 
-        self._sel_label = QLabel("No selection")
+        self._clear_all_btn = QPushButton("Clear All")
+        self._clear_all_btn.setObjectName("secondary")
+        self._clear_all_btn.setToolTip("Uncheck all messages")
+        self._clear_all_btn.clicked.connect(self._clear_all)
+        self._clear_all_btn.setVisible(False)
+        self._toolbar.addWidget(self._clear_all_btn)
+
+        self._toolbar.addStretch()
+
+        self._sel_label = QLabel("Range \u2014 No selection")
         self._sel_label.setObjectName("subheading")
-        sel_bar.addWidget(self._sel_label)
+        self._toolbar.addWidget(self._sel_label)
 
-        layout.addLayout(sel_bar)
+        layout.addLayout(self._toolbar)
 
         self._messages: list[discord.Message] = []
         self._search_query: str = ""
         self._match_indices: list[int] = []
         self._current_match: int = -1
-        self._range_start: int | None = None
-        self._range_end: int | None = None
+        self._base_font: QFont | None = None
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
         self._search_timer.timeout.connect(self._do_search)
 
-    def show_messages(self, messages: list[discord.Message], channel_name: str = "") -> None:
+        self._mode = SelectionMode.RANGE
+        self._range_from: int | None = None
+        self._range_to: int | None = None
+        self._block_item_changed = False
+        self._context_item: QListWidgetItem | None = None
+        self._from_icon = _make_from_icon()
+        self._to_icon = _make_to_icon()
+        self._bar_icon = _make_bar_icon()
+
+    def set_mode(self, mode: SelectionMode) -> None:
+        self._mode = mode
+        self._range_from = None
+        self._range_to = None
+
+        range_visible = mode == SelectionMode.RANGE
+        self._set_from_btn.setVisible(range_visible)
+        self._set_to_btn.setVisible(range_visible)
+        self._clear_btn.setVisible(range_visible)
+        self._select_all_btn.setVisible(not range_visible)
+        self._clear_all_btn.setVisible(not range_visible)
+
+        if mode == SelectionMode.RANGE:
+            self._list.setSelectionMode(
+                QListWidget.SelectionMode.SingleSelection
+            )
+        else:
+            self._list.clearSelection()
+            self._list.setSelectionMode(
+                QListWidget.SelectionMode.ExtendedSelection
+            )
+
+        self._block_item_changed = True
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is None:
+                continue
+            if mode == SelectionMode.CHECKBOX:
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
+            else:
+                flags = item.flags()
+                flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+                item.setFlags(flags)
+                item.setData(Qt.ItemDataRole.CheckStateRole, None)
+        self._block_item_changed = False
+
+        self._refresh_all_items()
+        self._update_sel_label()
+        self.mode_changed.emit(mode.value)
+
+    def show_messages(
+        self, messages: list[discord.Message], channel_name: str = ""
+    ) -> None:
         self._messages = messages
-        self._range_start = None
-        self._range_end = None
+        self._range_from = None
+        self._range_to = None
         self._search_query = ""
         self._match_indices = []
         self._current_match = -1
         self._search_input.clear()
         self._match_label.setText("")
-        self._update_sel_label()
 
         label = "Messages"
         if channel_name:
@@ -123,26 +244,39 @@ class MessagePreviewPanel(QWidget):
         label += f" ({len(messages)})"
         self._heading.setText(label)
 
+        self._block_item_changed = True
         self._list.clear()
-        for msg in messages:
+        for i, msg in enumerate(messages):
             display = self._format_message(msg)
             item = QListWidgetItem(display)
-            item.setData(Qt.ItemDataRole.UserRole, messages.index(msg))
+            item.setData(Qt.ItemDataRole.UserRole, i)
             font = item.font()
             font.setPointSize(10)
             item.setFont(font)
+            if self._mode == SelectionMode.CHECKBOX:
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
             self._list.addItem(item)
+        self._block_item_changed = False
 
         if self._list.count() > 0:
-            self._list.setCurrentRow(0)
+            self._base_font = QFont(self._list.item(0).font())
+
+        self._update_sel_label()
 
     def show_loading(self, count: int = 0) -> None:
         if count > 0:
-            self._heading.setText(f"Messages \u2014 Loading... ({count} fetched)")
+            self._heading.setText(
+                f"Messages \u2014 Loading... ({count} fetched)"
+            )
         else:
             self._heading.setText("Messages \u2014 Loading...")
         self._list.clear()
-        text = f"Loading messages... {count} fetched so far" if count else "Loading messages..."
+        text = (
+            f"Loading messages... {count} fetched so far"
+            if count
+            else "Loading messages..."
+        )
         item = QListWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
         font = item.font()
@@ -151,37 +285,47 @@ class MessagePreviewPanel(QWidget):
         self._list.addItem(item)
 
     def get_selected_messages(self) -> list[discord.Message]:
-        if self._range_start is not None and self._range_end is not None:
-            start = min(self._range_start, self._range_end)
-            end = max(self._range_start, self._range_end)
-            return self._messages[start:end + 1]
-
-        indices = set()
-        for item in self._list.selectedItems():
-            idx = item.data(Qt.ItemDataRole.UserRole)
-            if idx is not None:
-                indices.add(idx)
-        if not indices:
+        if self._mode == SelectionMode.RANGE:
+            if self._range_from is not None and self._range_to is not None:
+                lo = min(self._range_from, self._range_to)
+                hi = max(self._range_from, self._range_to)
+                return self._messages[lo : hi + 1]
             return self._messages
-        return [self._messages[i] for i in sorted(indices) if 0 <= i < len(self._messages)]
+        else:
+            indices: list[int] = []
+            for i in range(self._list.count()):
+                item = self._list.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    idx = item.data(Qt.ItemDataRole.UserRole)
+                    if idx is not None:
+                        indices.append(idx)
+            if not indices:
+                return self._messages
+            return [
+                self._messages[i]
+                for i in sorted(indices)
+                if 0 <= i < len(self._messages)
+            ]
 
     def get_selection_range(self) -> tuple[int, int] | None:
-        if self._range_start is not None and self._range_end is not None:
-            return (
-                min(self._range_start, self._range_end),
-                max(self._range_start, self._range_end),
-            )
-        selected = self._list.selectedItems()
-        if not selected:
+        if self._mode == SelectionMode.RANGE:
+            if self._range_from is not None and self._range_to is not None:
+                return (
+                    min(self._range_from, self._range_to),
+                    max(self._range_from, self._range_to),
+                )
             return None
-        indices = []
-        for item in selected:
-            idx = item.data(Qt.ItemDataRole.UserRole)
-            if idx is not None:
-                indices.append(idx)
-        if not indices:
+        else:
+            indices: list[int] = []
+            for i in range(self._list.count()):
+                item = self._list.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    idx = item.data(Qt.ItemDataRole.UserRole)
+                    if idx is not None:
+                        indices.append(idx)
+            if indices:
+                return (min(indices), max(indices))
             return None
-        return (min(indices), max(indices))
 
     @staticmethod
     def _format_message(msg: discord.Message) -> str:
@@ -190,7 +334,7 @@ class MessagePreviewPanel(QWidget):
         content = msg.content or "(no text content)"
         if len(content) > MAX_MESSAGE_LENGTH:
             content = content[:MAX_MESSAGE_LENGTH] + "..."
-        parts = []
+        parts: list[str] = []
         for embed in msg.embeds:
             if embed.description:
                 parts.append("[Embed]")
@@ -209,9 +353,9 @@ class MessagePreviewPanel(QWidget):
     def _do_search(self) -> None:
         self._match_indices = []
         self._current_match = -1
-        self._apply_highlights()
 
         if not self._search_query:
+            self._refresh_all_items()
             self._match_label.setText("")
             self._prev_btn.setEnabled(False)
             self._next_btn.setEnabled(False)
@@ -224,42 +368,74 @@ class MessagePreviewPanel(QWidget):
 
         if self._match_indices:
             self._current_match = 0
-            self._apply_highlights()
+            self._refresh_all_items()
             self._scroll_to_match(0)
             self._prev_btn.setEnabled(True)
             self._next_btn.setEnabled(True)
             self._update_match_label()
         else:
+            self._refresh_all_items()
             self._match_label.setText("No matches")
             self._prev_btn.setEnabled(False)
             self._next_btn.setEnabled(False)
 
-    def _apply_highlights(self) -> None:
+    def _refresh_all_items(self) -> None:
+        range_min: int | None = None
+        range_max: int | None = None
+        if self._range_from is not None and self._range_to is not None:
+            range_min = min(self._range_from, self._range_to)
+            range_max = max(self._range_from, self._range_to)
+
+        self._block_item_changed = True
         for i in range(self._list.count()):
             item = self._list.item(i)
             idx = item.data(Qt.ItemDataRole.UserRole)
             if idx is None:
                 continue
 
-            item.setBackground(QColor(0, 0, 0, 0))
+            font = QFont(self._base_font if self._base_font else item.font())
+            font.setPointSize(10)
+            font.setBold(False)
 
             if idx in self._match_indices:
-                match_pos = self._match_indices.index(idx) if idx in self._match_indices else -1
-                if match_pos == self._current_match:
-                    item.setBackground(MATCH_CURRENT_BG)
-                else:
-                    item.setBackground(MATCH_BG)
+                font.setBold(True)
 
-            if self._range_start is not None and self._range_end is not None:
-                sel_min = min(self._range_start, self._range_end)
-                sel_max = max(self._range_start, self._range_end)
-                if sel_min <= idx <= sel_max:
-                    item.setBackground(SELECTION_RANGE_BG)
-                if idx == self._range_start or idx == self._range_end:
-                    item.setBackground(SELECTION_START_BG)
+            item.setFont(font)
+
+            if self._mode == SelectionMode.RANGE:
+                in_range = (
+                    range_min is not None and range_min <= idx <= range_max
+                )
+                is_from = idx == self._range_from
+                is_to = idx == self._range_to
+
+                if in_range:
+                    item.setBackground(QBrush(QColor(RANGE_BG)))
+                else:
+                    item.setBackground(QBrush())
+
+                if is_from and is_to:
+                    item.setIcon(self._from_icon)
+                elif is_from:
+                    item.setIcon(self._from_icon)
+                elif is_to:
+                    item.setIcon(self._to_icon)
+                elif in_range:
+                    item.setIcon(self._bar_icon)
+                else:
+                    item.setIcon(QIcon())
+            else:
+                item.setBackground(QBrush())
+                item.setIcon(QIcon())
+
+        self._block_item_changed = False
 
     def _scroll_to_match(self, match_index: int) -> None:
-        if not self._match_indices or match_index < 0 or match_index >= len(self._match_indices):
+        if (
+            not self._match_indices
+            or match_index < 0
+            or match_index >= len(self._match_indices)
+        ):
             return
         msg_idx = self._match_indices[match_index]
         list_row = self._find_list_row_for_index(msg_idx)
@@ -277,95 +453,241 @@ class MessagePreviewPanel(QWidget):
     def _go_prev_match(self) -> None:
         if not self._match_indices:
             return
-        self._current_match = (self._current_match - 1) % len(self._match_indices)
-        self._apply_highlights()
+        self._current_match = (self._current_match - 1) % len(
+            self._match_indices
+        )
+        self._refresh_all_items()
         self._scroll_to_match(self._current_match)
         self._update_match_label()
 
     def _go_next_match(self) -> None:
         if not self._match_indices:
             return
-        self._current_match = (self._current_match + 1) % len(self._match_indices)
-        self._apply_highlights()
+        self._current_match = (self._current_match + 1) % len(
+            self._match_indices
+        )
+        self._refresh_all_items()
         self._scroll_to_match(self._current_match)
         self._update_match_label()
 
     def _update_match_label(self) -> None:
         if not self._match_indices:
-            self._match_label.setText("No matches" if self._search_query else "")
+            self._match_label.setText(
+                "No matches" if self._search_query else ""
+            )
         else:
             self._match_label.setText(
                 f"Match {self._current_match + 1} of {len(self._match_indices)}"
             )
 
-    def _set_range_start(self) -> None:
-        current = self._list.currentRow()
-        if current < 0:
+    def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
+        if self._mode == SelectionMode.RANGE:
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is None:
+                return
+
+            if self._range_from is None:
+                self._range_from = idx
+                self._range_to = None
+            elif self._range_to is None:
+                if idx < self._range_from:
+                    self._range_to = self._range_from
+                    self._range_from = idx
+                else:
+                    self._range_to = idx
+            else:
+                if idx < self._range_from:
+                    self._range_from = idx
+                elif idx > self._range_to:
+                    self._range_to = idx
+                else:
+                    dist_from = idx - self._range_from
+                    dist_to = self._range_to - idx
+                    if dist_from <= dist_to:
+                        self._range_from = idx
+                    else:
+                        self._range_to = idx
+
+            self._refresh_all_items()
+            self._update_sel_label()
+            self.selection_changed.emit()
+        elif self._mode == SelectionMode.CHECKBOX:
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is None:
+                return
+            new_state = (
+                Qt.CheckState.Unchecked
+                if item.checkState() == Qt.CheckState.Checked
+                else Qt.CheckState.Checked
+            )
+            self._block_item_changed = True
+            item.setCheckState(new_state)
+            self._block_item_changed = False
+            self._update_sel_label()
+            self.selection_changed.emit()
+
+    def _show_context_menu(self, pos) -> None:
+        menu = QMenu(self)
+        if self._mode == SelectionMode.RANGE:
+            item = self._list.itemAt(pos)
+            if item:
+                self._context_item = item
+                menu.addAction("Set as From", self._set_range_from_context)
+                menu.addAction("Set as To", self._set_range_to_context)
+                menu.addSeparator()
+            menu.addAction("Clear Selection", self._clear_range)
+        else:
+            menu.addAction("Check Selected", self._check_selected)
+            menu.addAction("Uncheck Selected", self._uncheck_selected)
+            menu.addSeparator()
+            menu.addAction("Check All", self._select_all)
+            menu.addAction("Uncheck All", self._clear_all)
+        menu.exec(self._list.viewport().mapToGlobal(pos))
+
+    def _set_range_from(self) -> None:
+        row = self._list.currentRow()
+        if row < 0:
             return
-        idx = self._list.item(current).data(Qt.ItemDataRole.UserRole)
+        item = self._list.item(row)
+        idx = item.data(Qt.ItemDataRole.UserRole)
         if idx is None:
             return
-        self._range_start = idx
-        if self._range_end is None:
-            self._range_end = idx
-        self._apply_highlights()
+        self._range_from = idx
+        self._refresh_all_items()
         self._update_sel_label()
         self.selection_changed.emit()
 
-    def _set_range_end(self) -> None:
-        current = self._list.currentRow()
-        if current < 0:
+    def _set_range_to(self) -> None:
+        row = self._list.currentRow()
+        if row < 0:
             return
-        idx = self._list.item(current).data(Qt.ItemDataRole.UserRole)
+        item = self._list.item(row)
+        idx = item.data(Qt.ItemDataRole.UserRole)
         if idx is None:
             return
-        self._range_end = idx
-        if self._range_start is None:
-            self._range_start = idx
-        self._apply_highlights()
+        self._range_to = idx
+        if self._range_from is not None and self._range_to < self._range_from:
+            self._range_to, self._range_from = self._range_from, self._range_to
+        self._refresh_all_items()
         self._update_sel_label()
         self.selection_changed.emit()
 
-    def _clear_selection(self) -> None:
-        self._range_start = None
-        self._range_end = None
-        self._list.clearSelection()
-        self._apply_highlights()
+    def _set_range_from_context(self) -> None:
+        if self._context_item is None:
+            return
+        idx = self._context_item.data(Qt.ItemDataRole.UserRole)
+        if idx is None:
+            return
+        self._range_from = idx
+        if self._range_to is not None and self._range_from > self._range_to:
+            self._range_from, self._range_to = self._range_to, self._range_from
+        self._refresh_all_items()
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _set_range_to_context(self) -> None:
+        if self._context_item is None:
+            return
+        idx = self._context_item.data(Qt.ItemDataRole.UserRole)
+        if idx is None:
+            return
+        self._range_to = idx
+        if self._range_from is not None and self._range_to < self._range_from:
+            self._range_from, self._range_to = self._range_to, self._range_from
+        self._refresh_all_items()
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _clear_range(self) -> None:
+        self._range_from = None
+        self._range_to = None
+        self._refresh_all_items()
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _select_all(self) -> None:
+        self._block_item_changed = True
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is not None:
+                item.setCheckState(Qt.CheckState.Checked)
+        self._block_item_changed = False
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _clear_all(self) -> None:
+        self._block_item_changed = True
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is not None:
+                item.setCheckState(Qt.CheckState.Unchecked)
+        self._block_item_changed = False
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _on_item_changed(self, item: QListWidgetItem) -> None:
+        if self._block_item_changed:
+            return
+        if self._mode != SelectionMode.CHECKBOX:
+            return
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _check_selected(self) -> None:
+        self._block_item_changed = True
+        for item in self._list.selectedItems():
+            item.setCheckState(Qt.CheckState.Checked)
+        self._block_item_changed = False
+        self._update_sel_label()
+        self.selection_changed.emit()
+
+    def _uncheck_selected(self) -> None:
+        self._block_item_changed = True
+        for item in self._list.selectedItems():
+            item.setCheckState(Qt.CheckState.Unchecked)
+        self._block_item_changed = False
         self._update_sel_label()
         self.selection_changed.emit()
 
     def _update_sel_label(self) -> None:
-        if self._range_start is not None and self._range_end is not None:
-            start = min(self._range_start, self._range_end)
-            end = max(self._range_start, self._range_end)
-            self._sel_label.setText(f"Selected {start + 1}\u2013{end + 1} of {len(self._messages)}")
-        elif self._list.selectedItems():
-            indices = []
-            for item in self._list.selectedItems():
-                idx = item.data(Qt.ItemDataRole.UserRole)
-                if idx is not None:
-                    indices.append(idx)
-            if indices:
-                self._sel_label.setText(f"Selected {len(indices)} messages")
+        total = len(self._messages)
+        if self._mode == SelectionMode.RANGE:
+            if self._range_from is not None and self._range_to is not None:
+                lo = min(self._range_from, self._range_to)
+                hi = max(self._range_from, self._range_to)
+                self._sel_label.setText(
+                    f"Range \u2014 {lo + 1}\u2013{hi + 1} of {total}"
+                )
             else:
-                self._sel_label.setText("No selection")
+                self._sel_label.setText("Range \u2014 No selection")
         else:
-            self._sel_label.setText("No selection \u2014 click Set Start to begin")
-
-    def _on_selection_changed(self) -> None:
-        self._update_sel_label()
-        self.selection_changed.emit()
+            count = 0
+            for i in range(self._list.count()):
+                item = self._list.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    idx = item.data(Qt.ItemDataRole.UserRole)
+                    if idx is not None:
+                        count += 1
+            if count > 0:
+                self._sel_label.setText(
+                    f"Checkbox \u2014 {count} of {total} selected"
+                )
+            else:
+                self._sel_label.setText("Checkbox \u2014 No selection")
 
     def clear(self) -> None:
         self._messages = []
-        self._range_start = None
-        self._range_end = None
+        self._range_from = None
+        self._range_to = None
         self._match_indices = []
         self._current_match = -1
         self._search_query = ""
+        self._base_font = None
         self._heading.setText("Messages")
         self._list.clear()
         self._match_label.setText("")
-        self._sel_label.setText("No selection \u2014 click Set Start to begin")
+        self._update_sel_label()
         self._prev_btn.setEnabled(False)
         self._next_btn.setEnabled(False)

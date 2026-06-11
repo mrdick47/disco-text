@@ -21,9 +21,10 @@ from PyQt6.QtWidgets import (
 from src.discord_client import DiscordClient
 from src.gui.channel_panel import ChannelListPanel
 from src.gui.export_dialog import ExportDialog
-from src.gui.message_preview import MessagePreviewPanel
+from src.gui.message_preview import MessagePreviewPanel, SelectionMode
 from src.gui.onboarding_dialog import OnboardingWizard
 from src.gui.server_panel import ServerListPanel
+from src.version import get_version
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,11 @@ class MainWindow(QMainWindow):
         if not cfg.get("onboarded"):
             logger.info("First run, showing onboarding wizard")
             self._show_onboarding()
+
+        saved_mode = cfg.get("selection_mode", "range")
+        mode = SelectionMode(saved_mode)
+        self._message_panel.set_mode(mode)
+        self._range_mode_action.setChecked(mode == SelectionMode.RANGE)
         logger.info("MainWindow __init__ complete")
 
     def _setup_ui(self) -> None:
@@ -208,6 +214,14 @@ class MainWindow(QMainWindow):
         help_menu = menu_bar.addMenu("Help")
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self._show_about)
+
+        selection_menu = menu_bar.addMenu("Selection")
+        self._range_mode_action = selection_menu.addAction("Range Mode")
+        self._range_mode_action.setCheckable(True)
+        self._range_mode_action.setChecked(True)
+        self._range_mode_action.toggled.connect(
+            self._on_selection_mode_toggled
+        )
 
         self._status_widget = QStatusBar()
         self.setStatusBar(self._status_widget)
@@ -395,11 +409,19 @@ class MainWindow(QMainWindow):
         _save_config(cfg)
         logger.info("Onboarding marked complete")
 
+    def _on_selection_mode_toggled(self, checked: bool) -> None:
+        mode = SelectionMode.RANGE if checked else SelectionMode.CHECKBOX
+        self._message_panel.set_mode(mode)
+        cfg = _load_config()
+        cfg["selection_mode"] = mode.value
+        _save_config(cfg)
+
     def _show_about(self) -> None:
+        version = get_version()
         QMessageBox.about(
             self,
             "About Disco-Text",
-            "Disco-Text v0.1.0\n\n"
+            f"Disco-Text v{version}\n\n"
             "Export Discord channel messages to text files "
             "for easy AI consumption.",
         )

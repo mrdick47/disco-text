@@ -17,3 +17,8 @@ venv/
 .ruff_cache/
 logs/
 exports/
+
+# Icon build artifacts (rebuilt from disco-ball.jpg)
+assets/icon.iconset/
+assets/icon.ico
+assets/icon.icns
