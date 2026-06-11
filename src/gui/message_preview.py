@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.time_format import format_timestamp
+
 MAX_MESSAGE_LENGTH = 300
 
 RANGE_BG = "#7c3aed"
@@ -75,6 +77,7 @@ class SelectionMode(enum.Enum):
 class MessagePreviewPanel(QWidget):
     selection_changed = pyqtSignal()
     mode_changed = pyqtSignal(str)
+    use_24h_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,6 +95,14 @@ class MessagePreviewPanel(QWidget):
         self._search_input.setClearButtonEnabled(True)
         self._search_input.textChanged.connect(self._on_search_text_changed)
         search_bar.addWidget(self._search_input, 1)
+
+        self._clock_btn = QPushButton("12h")
+        self._clock_btn.setObjectName("nav")
+        self._clock_btn.setFixedWidth(36)
+        self._clock_btn.setToolTip("Toggle 12h/24h clock")
+        self._clock_btn.setCheckable(True)
+        self._clock_btn.clicked.connect(self._toggle_clock)
+        search_bar.addWidget(self._clock_btn)
 
         self._prev_btn = QPushButton("\u25b2")
         self._prev_btn.setObjectName("nav")
@@ -170,6 +181,7 @@ class MessagePreviewPanel(QWidget):
         self._match_indices: list[int] = []
         self._current_match: int = -1
         self._base_font: QFont | None = None
+        self._use_24h: bool = False
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
@@ -327,9 +339,8 @@ class MessagePreviewPanel(QWidget):
                 return (min(indices), max(indices))
             return None
 
-    @staticmethod
-    def _format_message(msg: discord.Message) -> str:
-        timestamp = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    def _format_message(self, msg: discord.Message) -> str:
+        timestamp = format_timestamp(msg.created_at, self._use_24h)
         author = msg.author.display_name
         content = msg.content or "(no text content)"
         if len(content) > MAX_MESSAGE_LENGTH:
@@ -349,6 +360,31 @@ class MessagePreviewPanel(QWidget):
     def _on_search_text_changed(self, text: str) -> None:
         self._search_query = text.strip().lower()
         self._search_timer.start()
+
+    def _toggle_clock(self, checked: bool) -> None:
+        self._use_24h = checked
+        self._clock_btn.setText("24h" if checked else "12h")
+        self._refresh_display()
+        self.use_24h_changed.emit(checked)
+
+    def set_use_24h(self, use_24h: bool) -> None:
+        self._use_24h = use_24h
+        self._clock_btn.setChecked(use_24h)
+        self._clock_btn.setText("24h" if use_24h else "12h")
+        self._refresh_display()
+
+    def _refresh_display(self) -> None:
+        self._block_item_changed = True
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            idx = item.data(Qt.ItemDataRole.UserRole)
+            if idx is not None and 0 <= idx < len(self._messages):
+                item.setText(self._format_message(self._messages[idx]))
+        self._block_item_changed = False
+        if self._search_query:
+            self._do_search()
+        else:
+            self._refresh_all_items()
 
     def _do_search(self) -> None:
         self._match_indices = []

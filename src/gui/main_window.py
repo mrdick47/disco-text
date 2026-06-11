@@ -149,7 +149,19 @@ class MainWindow(QMainWindow):
         mode = SelectionMode(saved_mode)
         self._message_panel.set_mode(mode)
         self._range_mode_action.setChecked(mode == SelectionMode.RANGE)
+
+        saved_24h = cfg.get("use_24h", False)
+        self._message_panel.set_use_24h(saved_24h)
+        self._message_panel.use_24h_changed.connect(self._on_use_24h_changed)
         logger.info("MainWindow __init__ complete")
+
+        saved_token = self._token_input.text().strip()
+        if saved_token:
+            logger.info("Auto-connecting with saved token")
+            self._autoconnect = True
+            self._connect()
+        else:
+            self._autoconnect = False
 
     def _setup_ui(self) -> None:
         central = QWidget()
@@ -260,7 +272,8 @@ class MainWindow(QMainWindow):
     def _connect(self) -> None:
         token = self._token_input.text().strip()
         if not token:
-            QMessageBox.warning(self, "No Token", "Please enter a bot token.")
+            if not getattr(self, "_autoconnect", False):
+                QMessageBox.warning(self, "No Token", "Please enter a bot token.")
             return
 
         logger.info("Connecting with token (length=%d)", len(token))
@@ -288,6 +301,7 @@ class MainWindow(QMainWindow):
 
     def _on_connected(self) -> None:
         logger.info("_on_connected called")
+        self._autoconnect = False
         self._connect_btn.setEnabled(False)
         self._disconnect_btn.setEnabled(True)
         self._status_indicator.setText("● Connected")
@@ -315,7 +329,9 @@ class MainWindow(QMainWindow):
         self._connect_btn.setEnabled(True)
         self._status_indicator.setText("● Error")
         self._status_widget.showMessage(f"Error: {message}")
-        QMessageBox.critical(self, "Connection Error", message)
+        if not getattr(self, "_autoconnect", False):
+            QMessageBox.critical(self, "Connection Error", message)
+        self._autoconnect = False
 
     def _on_server_selected(self, guild_id: str) -> None:
         logger.info("Server selected: guild_id=%s", guild_id)
@@ -414,6 +430,11 @@ class MainWindow(QMainWindow):
         self._message_panel.set_mode(mode)
         cfg = _load_config()
         cfg["selection_mode"] = mode.value
+        _save_config(cfg)
+
+    def _on_use_24h_changed(self, use_24h: bool) -> None:
+        cfg = _load_config()
+        cfg["use_24h"] = use_24h
         _save_config(cfg)
 
     def _show_about(self) -> None:

@@ -1,10 +1,7 @@
 from datetime import datetime, timezone
 
-import discord
-import pytest
-
-from src.exporters.txt_exporter import export_txt
 from src.exporters.md_exporter import export_md
+from src.exporters.txt_exporter import export_txt
 
 
 class FakeUser:
