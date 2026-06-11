@@ -5,7 +5,10 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 assets_dir = str(Path('.', 'assets').resolve())
-icon_path = str(Path(assets_dir, 'icon.ico')) if sys.platform == 'win32' else None
+if sys.platform == 'win32':
+    icon_path = str(Path(assets_dir, 'icon.ico'))
+else:
+    icon_path = str(Path(assets_dir, 'icon.png'))
 
 datas = []
 datas += collect_data_files('PyQt6')
